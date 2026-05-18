@@ -1,5 +1,5 @@
 import { TekinButton, TekinTopBar } from '@tekin/ui'
-import { LayoutGrid, List, LogOut, Plus } from 'lucide-react'
+import { List, LogOut, Plus } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { RoleSwitcher } from '../components/RoleSwitcher'
@@ -7,9 +7,8 @@ import type { AppRole } from '../stores/useAppStore'
 import { useAppStore } from '../stores/useAppStore'
 
 const tabs = [
-  { path: '/waiter/tables', label: 'Tables', icon: LayoutGrid },
-  { path: '/waiter/new', label: 'New order', icon: Plus },
-  { path: '/waiter/orders', label: 'My orders', icon: List },
+  { path: '/waiter/new', label: 'New order', icon: Plus, primary: true },
+  { path: '/waiter/orders', label: 'My orders', icon: List, primary: false },
 ] as const
 
 export type WaiterLayoutProps = {
@@ -24,8 +23,7 @@ export function WaiterLayout({ children }: WaiterLayoutProps) {
   const session = useAppStore((s) => s.waiterSession)
   const waiterLogout = useAppStore((s) => s.waiterLogout)
 
-  const waiterDest =
-    session != null ? '/waiter/tables' : '/waiter/login'
+  const waiterDest = session != null ? '/waiter/new' : '/waiter/login'
 
   return (
     <div className="flex min-h-screen flex-col bg-tekin-gray-50 pb-[calc(5rem+env(safe-area-inset-bottom))]">
@@ -58,7 +56,7 @@ export function WaiterLayout({ children }: WaiterLayoutProps) {
                     next === 'manager'
                       ? '/manager/dashboard'
                       : next === 'cashier'
-                        ? '/cashier/active'
+                        ? '/cashier/orders'
                         : next === 'waiter'
                           ? waiterDest
                           : next === 'kitchen'
@@ -74,19 +72,19 @@ export function WaiterLayout({ children }: WaiterLayoutProps) {
 
       <main className="flex-1 px-4 py-4 md:px-6">{children}</main>
 
-      <nav className="fixed bottom-0 left-0 right-0 border-t border-tekin-gray-200 bg-tekin-white px-2 pb-[env(safe-area-inset-bottom)] pt-2 md:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-3 gap-2">
+      <nav className="fixed bottom-0 left-0 right-0 border-t border-tekin-gray-200 bg-tekin-white px-3 pb-[env(safe-area-inset-bottom)] pt-2 md:hidden">
+        <div className="mx-auto grid max-w-lg grid-cols-2 gap-2">
           {tabs.map((tab) => {
             const Icon = tab.icon
             const active = location.pathname.startsWith(tab.path)
-            const isNew = tab.path === '/waiter/new'
+            const primary = tab.primary
             return (
               <button
                 key={tab.path}
                 type="button"
                 onClick={() => navigate(tab.path)}
                 className={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold uppercase tracking-wide transition-colors duration-150 ${
-                  isNew
+                  primary
                     ? active
                       ? 'bg-tekin-emerald text-white'
                       : 'bg-tekin-emerald-light text-tekin-emerald'
@@ -104,7 +102,7 @@ export function WaiterLayout({ children }: WaiterLayoutProps) {
       </nav>
 
       <nav className="hidden border-t border-tekin-gray-200 bg-tekin-white px-6 py-3 md:block">
-        <div className="mx-auto flex max-w-3xl justify-between gap-3">
+        <div className="mx-auto flex max-w-3xl justify-center gap-4">
           {tabs.map((tab) => {
             const Icon = tab.icon
             const active = location.pathname.startsWith(tab.path)
@@ -113,7 +111,7 @@ export function WaiterLayout({ children }: WaiterLayoutProps) {
                 key={tab.path}
                 type="button"
                 onClick={() => navigate(tab.path)}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-semibold transition-colors duration-150 ${
+                className={`flex min-w-[200px] flex-1 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-colors duration-150 ${
                   active
                     ? 'border-tekin-emerald bg-tekin-emerald-light text-tekin-emerald'
                     : 'border-tekin-gray-200 bg-tekin-white text-tekin-gray-800 hover:bg-tekin-gray-50'

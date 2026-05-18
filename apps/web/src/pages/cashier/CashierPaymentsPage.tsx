@@ -47,7 +47,8 @@ export function CashierPaymentsPage() {
           <span className="font-semibold text-tekin-gray-800">Direct-pay</span>{' '}
           channels settle straight into venue custody (shown below).{' '}
           <span className="font-semibold text-tekin-gray-800">Floor waiter</span>{' '}
-          tabs paid at your counter add to drawer totals once you settle hand-in on Orders & custody.
+          floor tabs paid at your counter add to drawer totals once you confirm hand-in on{' '}
+          <span className="font-semibold text-tekin-gray-800">Live orders</span>.
         </p>
       </TekinCard>
 

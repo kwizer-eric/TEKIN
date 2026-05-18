@@ -17,7 +17,7 @@ export function WaiterLoginPage() {
   const [error, setError] = useState<string | undefined>(undefined)
 
   if (existingSession != null) {
-    return <Navigate to="/waiter/tables" replace />
+    return <Navigate to="/waiter/new" replace />
   }
 
   const submit = () => {
@@ -31,7 +31,7 @@ export function WaiterLoginPage() {
       setError('Wrong PIN for this name — try again.')
       return
     }
-    navigate('/waiter/tables', { replace: true })
+    navigate('/waiter/new', { replace: true })
   }
 
   return (

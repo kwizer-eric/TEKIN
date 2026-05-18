@@ -82,10 +82,10 @@ export function KitchenBoardPage() {
       next === 'manager'
         ? '/manager/dashboard'
         : next === 'cashier'
-          ? '/cashier/active'
+          ? '/cashier/orders'
           : next === 'waiter'
             ? waiterSession != null
-              ? '/waiter/tables'
+              ? '/waiter/new'
               : '/waiter/login'
             : next === 'kitchen'
               ? '/kitchen'

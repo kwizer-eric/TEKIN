@@ -130,6 +130,8 @@ interface AppState {
   confirmFloorOrder: (payload: { table: string; lines: CartLine[] }) => void
   markPaid: (id: string, method: 'Cash' | 'MoMo' | 'Card') => void
   completeWaiterHandover: (id: string) => void
+  /** Mark every unpaid floor ticket for one waiter paid + hand-in complete (bulk balance match). */
+  settleWaiterUnpaid: (waiterName: string) => void
   settleAllWaiterUnpaidAtEod: () => void
 
   shift: ShiftState
@@ -177,7 +179,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   waiterSession: null,
   waiterLogin: (name, pin) => {
     if (!validateWaiterPin(name, pin)) return false
-    set({ waiterSession: { name } })
+    set({
+      waiterSession: { name },
+      waiterTable: null,
+      waiterCart: [],
+    })
     return true
   },
   waiterLogout: () =>
@@ -323,6 +329,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         o.paid &&
         !o.waiterHandoverComplete
           ? { ...o, waiterHandoverComplete: true }
+          : o,
+      ),
+    })),
+  settleWaiterUnpaid: (waiterName) =>
+    set((s) => ({
+      cashierOrders: s.cashierOrders.map((o) =>
+        o.channel === 'waiter' &&
+        !o.paid &&
+        o.placedByWaiterName === waiterName
+          ? {
+              ...o,
+              paid: true,
+              method: 'Cash',
+              waiterHandoverComplete: true,
+            }
           : o,
       ),
     })),
