@@ -1,0 +1,51 @@
+/**
+ * TEKIN design tokens — source of truth for CSS variables.
+ * Import once in the app entry (main.tsx).
+ */
+
+:root {
+  --tekin-navy: #0d1b2a;
+  --tekin-navy-light: #162334;
+  --tekin-navy-muted: #1e2f40;
+
+  --tekin-emerald: #0f6e56;
+  --tekin-emerald-light: #e1f5ee;
+  --tekin-emerald-mid: #1d9e75;
+
+  --tekin-amber: #ba7517;
+  --tekin-amber-light: #faeeda;
+
+  --tekin-red: #a32d2d;
+  --tekin-red-light: #fcebeb;
+
+  --tekin-blue: #185fa5;
+  --tekin-blue-light: #e6f1fb;
+
+  --tekin-gray-50: #f5f5f3;
+  --tekin-gray-100: #ebebea;
+  --tekin-gray-200: #d3d1c7;
+  --tekin-gray-400: #888780;
+  --tekin-gray-600: #5f5e5a;
+  --tekin-gray-800: #2c2c2a;
+  --tekin-gray-900: #1a1a18;
+
+  --tekin-white: #ffffff;
+
+  --tekin-font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --tekin-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+@keyframes tekin-pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.tekin-pulse-dot {
+  animation: tekin-pulse-dot 1.2s ease-in-out infinite;
+}

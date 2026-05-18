@@ -1,0 +1,11 @@
+{
+  "name": "tekin",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run dev -w @tekin/web",
+    "build": "npm run build -w @tekin/web",
+    "preview": "npm run preview -w @tekin/web",
+    "lint": "npm run lint -w @tekin/web"
+  }
+}

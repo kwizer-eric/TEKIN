@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply m-0 min-h-screen bg-tekin-gray-50 font-sans text-sm font-normal text-tekin-gray-800;
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+}
+
+@keyframes tekin-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
