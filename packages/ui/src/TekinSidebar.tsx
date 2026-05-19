@@ -13,7 +13,6 @@ export type TekinSidebarRole =
   | 'cashier'
   | 'waiter'
   | 'kitchen'
-  | 'consumer'
 
 export type TekinSidebarProps = {
   brandLabel?: string
@@ -35,7 +34,7 @@ export function TekinSidebar({
   footer,
 }: TekinSidebarProps) {
   return (
-    <aside className="flex h-full w-[240px] shrink-0 flex-col bg-[color:var(--tekin-navy)] md:w-[240px] max-md:w-16 max-md:overflow-hidden">
+    <aside className="sticky top-0 flex h-screen w-[240px] shrink-0 flex-col bg-[color:var(--tekin-navy)] md:w-[240px] max-md:w-16 max-md:overflow-hidden">
       <div className="flex items-center gap-2 border-b border-white/10 px-5 py-5 max-md:justify-center max-md:px-2">
         <div
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--tekin-navy-muted)] text-[11px] font-semibold tracking-wide text-white"

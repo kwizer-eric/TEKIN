@@ -1,13 +1,13 @@
 /**
- * Screen: Waiter balance — Cashier — Pick a waiter, see unpaid tabs, settle in one match.
+ * Screen: Waiter balance — floor tickets, pipeline, and bulk settlement.
  */
-import { TekinBadge, TekinButton, TekinCard, TekinMetricCard } from '@tekin/ui'
+import { TekinBadge, TekinButton, TekinCard } from '@tekin/ui'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import type { CashierOrderRow } from '../../data/fixtures'
 import { STAFF } from '../../data/fixtures'
-import { formatRwf, relativeOrAbsolute } from '../../lib/format'
+import { formatRwf } from '../../lib/format'
 import { useAppStore } from '../../stores/useAppStore'
+import { CashierOrdersFeed } from './CashierOrdersFeed'
 
 export function CashierWaiterSettlePage() {
   const orders = useAppStore((s) => s.cashierOrders)
@@ -28,9 +28,6 @@ export function CashierWaiterSettlePage() {
         list.push(o)
         map.set(name, list)
       })
-    for (const [, list] of map) {
-      list.sort((a, b) => b.receivedAt - a.receivedAt)
-    }
     return map
   }, [orders])
 
@@ -43,154 +40,113 @@ export function CashierWaiterSettlePage() {
     return out
   }, [rowsByWaiter])
 
-  const venueUnpaidTotal = useMemo(
-    () =>
-      orders
-        .filter((o) => o.channel === 'waiter' && !o.paid)
-        .reduce((s, o) => s + o.totalRwf, 0),
-    [orders],
-  )
-
   const unpaidForSelected = rowsByWaiter.get(selectedWaiter) ?? []
   const selectedTotal = totalsByWaiter[selectedWaiter] ?? 0
+  const openTabCount = unpaidForSelected.length
 
   return (
-    <div className="flex flex-col gap-4">
-      <TekinCard className="border-tekin-emerald bg-tekin-emerald-light">
-        <p className="text-[13px] font-semibold text-tekin-emerald">
-          Waiter balance desk
-        </p>
-        <p className="mt-2 text-sm text-tekin-gray-800">
-          Choose a waiter to see every <span className="font-semibold">open tab</span> still on
-          the floor. When they hand you cash or MoMo for the full running balance, record one
-          settlement — TEKIN marks every linked ticket paid and squared.
-        </p>
-        <p className="mt-3 text-[13px] text-tekin-gray-700">
-          Need ticket-level detail?{' '}
-          <Link
-            to="/cashier/orders"
-            className="font-semibold text-tekin-emerald underline-offset-2 hover:underline"
-          >
-            Open live orders
-          </Link>
-          .
-        </p>
-      </TekinCard>
-
-      <TekinMetricCard
-        label="Venue-wide · unpaid floor tabs"
-        value={formatRwf(venueUnpaidTotal)}
-        delta={{
-          text:
-            venueUnpaidTotal > 0
-              ? 'Split per waiter below — settle where cash landed'
-              : 'Nothing outstanding with waiters',
-          tone: venueUnpaidTotal > 0 ? 'warning' : 'positive',
-        }}
+    <div className="flex flex-col gap-6 pb-6">
+      <CashierOrdersFeed
+        variant="waiterBalance"
+        focusWaiterName={selectedWaiter}
       />
 
-      <div className="grid flex-1 gap-4 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
-        <TekinCard className="h-fit">
-          <h2 className="text-[15px] font-semibold text-tekin-gray-900">
-            Waiters
-          </h2>
-          <ul className="mt-3 flex flex-col gap-2">
-            {STAFF.waiters.map((name) => {
-              const due = totalsByWaiter[name] ?? 0
-              const active = selectedWaiter === name
-              return (
-                <li key={name}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedWaiter(name)}
-                    className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-3 text-left transition-colors duration-150 ${
-                      active
-                        ? 'border-tekin-emerald bg-tekin-emerald-light'
-                        : 'border-tekin-gray-200 bg-tekin-white hover:bg-tekin-gray-50'
-                    }`}
-                  >
-                    <span className="text-sm font-semibold text-tekin-gray-900">{name}</span>
-                    <span className="text-right">
-                      <span className="block text-[16px] font-semibold text-tekin-gray-900">
-                        {formatRwf(due)}
-                      </span>
-                      {due > 0 ? (
-                        <TekinBadge status="warning" label="Open" />
-                      ) : (
-                        <TekinBadge status="healthy" label="Clear" />
-                      )}
-                    </span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </TekinCard>
+      <div className="border-t border-tekin-gray-200 pt-4">
+        <h2 className="text-[16px] font-semibold text-tekin-gray-900">
+          Bulk settlement
+        </h2>
+        <p className="mt-1 text-[13px] text-tekin-gray-600">
+          Pick a waiter — open tabs are in the list above. Record one payment for
+          their full balance.
+        </p>
 
-        <TekinCard className="flex min-h-[420px] flex-col gap-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-tekin-gray-600">
-                Selected waiter
-              </p>
-              <p className="text-[22px] font-semibold text-tekin-gray-900">{selectedWaiter}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-tekin-gray-600">
-                Balance to settle
-              </p>
-              <p className="text-[28px] font-semibold text-tekin-gray-900">
-                {formatRwf(selectedTotal)}
-              </p>
-            </div>
-          </div>
-
-          {unpaidForSelected.length === 0 ? (
-            <div className="flex flex-1 flex-col justify-center rounded-xl border border-tekin-gray-200 bg-tekin-gray-50 px-4 py-10 text-center">
-              <p className="text-sm font-semibold text-tekin-gray-900">
-                No unpaid orders for this waiter.
-              </p>
-              <p className="mt-2 text-[13px] text-tekin-gray-600">
-                When they confirm new rounds on the handset, open tabs appear here automatically.
-              </p>
-            </div>
-          ) : (
-            <>
-              <ul className="flex max-h-[340px] flex-col gap-2 overflow-auto">
-                {unpaidForSelected.map((o) => (
-                  <li
-                    key={o.id}
-                    className="rounded-xl border border-tekin-gray-200 px-4 py-3"
-                  >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="font-semibold text-tekin-gray-900">{o.id}</span>
-                      <span className="text-[18px] font-semibold text-tekin-gray-900">
-                        {formatRwf(o.totalRwf)}
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+          <TekinCard className="flex flex-col">
+            <h3 className="text-[13px] font-semibold uppercase tracking-wide text-tekin-gray-600">
+              Waiters
+            </h3>
+            <ul className="mt-3 flex max-h-[min(40vh,360px)] flex-col gap-2 overflow-y-auto pr-1">
+              {STAFF.waiters.map((name) => {
+                const due = totalsByWaiter[name] ?? 0
+                const tabCount = (rowsByWaiter.get(name) ?? []).length
+                const active = selectedWaiter === name
+                return (
+                  <li key={name}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedWaiter(name)}
+                      className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-3 text-left transition-colors duration-150 ${
+                        active
+                          ? 'border-tekin-emerald bg-tekin-emerald-light'
+                          : 'border-tekin-gray-200 bg-tekin-white hover:bg-tekin-gray-50'
+                      }`}
+                    >
+                      <span className="text-sm font-semibold text-tekin-gray-900">
+                        {name}
                       </span>
-                    </div>
-                    <p className="text-[13px] text-tekin-gray-600">
-                      Table {o.table ?? '—'} · {relativeOrAbsolute(o.receivedAt)}
-                    </p>
+                      <span className="text-right">
+                        <span className="block text-[16px] font-semibold text-tekin-gray-900">
+                          {formatRwf(due)}
+                        </span>
+                        {due > 0 ? (
+                          <TekinBadge
+                            status="warning"
+                            label={`${tabCount} open`}
+                          />
+                        ) : (
+                          <TekinBadge status="healthy" label="Clear" />
+                        )}
+                      </span>
+                    </button>
                   </li>
-                ))}
-              </ul>
-              <div className="mt-auto flex flex-col gap-2 border-t border-tekin-gray-100 pt-4">
+                )
+              })}
+            </ul>
+          </TekinCard>
+
+          <TekinCard className="flex flex-col justify-center gap-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-tekin-gray-600">
+                  Selected
+                </p>
+                <p className="text-[22px] font-semibold text-tekin-gray-900">
+                  {selectedWaiter}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-tekin-gray-600">
+                  Balance to settle
+                </p>
+                <p className="text-[28px] font-semibold text-tekin-gray-900">
+                  {formatRwf(selectedTotal)}
+                </p>
+              </div>
+            </div>
+
+            {openTabCount === 0 ? (
+              <p className="rounded-xl border border-tekin-gray-200 bg-tekin-gray-50 px-4 py-8 text-center text-sm text-tekin-gray-600">
+                No unpaid tabs for {selectedWaiter}. List above shows hand-ins and
+                past floor tickets.
+              </p>
+            ) : (
+              <>
+                <p className="text-[13px] text-tekin-gray-600">
+                  {openTabCount} open tab{openTabCount === 1 ? '' : 's'} for{' '}
+                  {selectedWaiter} in the list above — totals{' '}
+                  {formatRwf(selectedTotal)}.
+                </p>
                 <TekinButton
                   type="button"
                   className="min-h-[52px] w-full text-[15px]"
-                  disabled={selectedTotal <= 0}
                   onClick={() => settleWaiterUnpaid(selectedWaiter)}
                 >
                   Record settlement · {formatRwf(selectedTotal)}
                 </TekinButton>
-                <p className="text-center text-[12px] text-tekin-gray-600">
-                  Demo: books every open ticket for this waiter as cash collected and closes hand-in
-                  in one step.
-                </p>
-              </div>
-            </>
-          )}
-        </TekinCard>
+              </>
+            )}
+          </TekinCard>
+        </div>
       </div>
     </div>
   )

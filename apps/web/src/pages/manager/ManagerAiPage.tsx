@@ -16,15 +16,15 @@ export function ManagerAiPage() {
   const activePrompt = MANAGER_AI_PROMPTS.find((p) => p.id === activeId)
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row">
-      <TekinCard className="lg:max-w-xs lg:shrink-0">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+      <TekinCard className="flex h-full min-h-0 flex-col lg:max-w-xs lg:shrink-0">
         <div className="mb-4 flex items-center gap-2">
           <Brain className="h-5 w-5 text-tekin-blue" aria-hidden />
           <h2 className="text-[16px] font-semibold text-tekin-gray-900">
             Prompts
           </h2>
         </div>
-        <ul className="flex flex-col gap-2">
+        <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto pr-1">
           {MANAGER_AI_PROMPTS.map((p) => (
             <li key={p.id}>
               <button
@@ -46,7 +46,7 @@ export function ManagerAiPage() {
         </p>
       </TekinCard>
 
-      <TekinCard className="min-h-[420px] flex-1 border-tekin-navy/15">
+      <TekinCard className="flex min-h-0 flex-1 flex-col overflow-auto border-tekin-navy/15">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-tekin-amber" aria-hidden />

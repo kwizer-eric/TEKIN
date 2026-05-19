@@ -1,27 +1,41 @@
 /**
- * Screen: Waiter order builder — Menu-first flow with inline table pick + review/send.
+ * Screen: Waiter order builder — create, review, confirm, and send.
  */
 import { TekinBadge, TekinButton, TekinCard } from '@tekin/ui'
-import { Check, ChevronRight } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MENU_ITEMS, RESTAURANT, type MenuShelf } from '../../data/fixtures'
 import { formatRwf } from '../../lib/format'
 import { useAppStore } from '../../stores/useAppStore'
 
 type Phase = 'menu' | 'review' | 'confirm'
+type MenuView = 'drinks' | 'food'
 
-const TABLES = Array.from({ length: 16 }, (_, i) => i + 1)
-
-const SHELVES: { id: MenuShelf; label: string; hint: string }[] = [
-  { id: 'liquor', label: 'Liquor', hint: 'Spirits · doubles' },
-  { id: 'beer_soft', label: 'Beer & soft', hint: 'Beer · juices · soda' },
-  { id: 'food', label: 'Food', hint: 'Kitchen · timed prep' },
+const MENU_VIEWS: {
+  id: MenuView
+  label: string
+  hint: string
+  kinds: string[]
+}[] = [
+  {
+    id: 'drinks',
+    label: 'Drinks',
+    hint: 'Liquor, beer, and soft drinks',
+    kinds: ['liquor', 'beer', 'soft'],
+  },
+  {
+    id: 'food',
+    label: 'Food',
+    hint: 'Kitchen items and meals',
+    kinds: ['food'],
+  },
 ]
 
 export function WaiterNewOrderPage() {
   const navigate = useNavigate()
   const session = useAppStore((s) => s.waiterSession)
+  const menuItems = useAppStore((s) => s.menuItems)
+  const tables = useAppStore((s) => s.tables)
   const table = useAppStore((s) => s.waiterTable)
   const setTable = useAppStore((s) => s.setWaiterTable)
   const cart = useAppStore((s) => s.waiterCart)
@@ -31,17 +45,22 @@ export function WaiterNewOrderPage() {
   const confirmFloorOrder = useAppStore((s) => s.confirmFloorOrder)
 
   const [phase, setPhase] = useState<Phase>('menu')
-  const [shelf, setShelf] = useState<MenuShelf>('liquor')
+  const [view, setView] = useState<MenuView>('drinks')
+  const [query, setQuery] = useState('')
 
-  const items = useMemo(
-    () => MENU_ITEMS.filter((m) => m.shelf === shelf),
-    [shelf],
-  )
+  const activeView = MENU_VIEWS.find((v) => v.id === view) ?? MENU_VIEWS[0]
+  const items = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return menuItems.filter((item) => {
+      const inKind = activeView.kinds.includes(item.kind)
+      if (!inKind) return false
+      if (!q) return true
+      return item.name.toLowerCase().includes(q)
+    })
+  }, [activeView.kinds, menuItems, query])
 
   const total = cart.reduce((sum, l) => sum + l.unitPriceRwf * l.qty, 0)
   const cartCount = cart.reduce((s, l) => s + l.qty, 0)
-
-  const shelfMeta = SHELVES.find((s) => s.id === shelf)
 
   const goReview = () => {
     if (cart.length === 0) return
@@ -49,37 +68,52 @@ export function WaiterNewOrderPage() {
   }
 
   const goConfirm = () => {
-    if (!table || cart.length === 0) return
+    if (cart.length === 0) return
     setPhase('confirm')
   }
 
   const tableStrip = (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-tekin-gray-500">
-          Table
+    <div className="rounded-xl border border-tekin-gray-200 bg-tekin-white p-2.5">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-tekin-gray-500">
+          Table (optional)
         </p>
         {table != null ? (
-          <TekinBadge status="healthy" label={`Cover · ${table}`} />
+          <span className="rounded-full bg-tekin-emerald-light px-2 py-0.5 text-[10px] font-semibold text-tekin-emerald">
+            {table}
+          </span>
         ) : (
-          <TekinBadge status="warning" label="Select table" />
+          <span className="rounded-full bg-tekin-gray-100 px-2 py-0.5 text-[10px] font-medium text-tekin-gray-600">
+            None
+          </span>
         )}
       </div>
-      <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 pt-0.5">
-        {TABLES.map((n) => {
-          const on = table === n
+      <div className="-mx-0.5 flex gap-1.5 overflow-x-auto pb-0.5">
+        <button
+          type="button"
+          onClick={() => setTable(null)}
+          className={`flex h-8 shrink-0 items-center justify-center rounded-lg px-2.5 text-[12px] font-semibold transition-all duration-150 ${
+            table == null
+              ? 'bg-tekin-navy text-white'
+              : 'border border-tekin-gray-200 bg-tekin-white text-tekin-gray-800 hover:border-tekin-emerald/40'
+          }`}
+        >
+          No table
+        </button>
+        {tables.map((label) => {
+          const on = table === label
           return (
             <button
-              key={n}
+              key={label}
               type="button"
-              onClick={() => setTable(n)}
-              className={`flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-xl text-[15px] font-semibold transition-all duration-150 ${
+              onClick={() => setTable(label)}
+              className={`flex h-8 min-w-[2.25rem] shrink-0 items-center justify-center rounded-lg px-2.5 text-[12px] font-semibold transition-all duration-150 ${
                 on
-                  ? 'bg-tekin-emerald text-white shadow-md ring-2 ring-tekin-emerald ring-offset-2 ring-offset-tekin-white'
-                  : 'border border-tekin-gray-200 bg-tekin-white text-tekin-gray-800 hover:border-tekin-emerald/50 hover:bg-tekin-gray-50'
+                  ? 'bg-tekin-emerald text-white'
+                  : 'border border-tekin-gray-200 bg-tekin-white text-tekin-gray-800 hover:border-tekin-emerald/50'
               }`}
             >
-              {n}
+              {label}
             </button>
           )
         })}
@@ -87,111 +121,71 @@ export function WaiterNewOrderPage() {
     </div>
   )
 
-  const phaseSteps = (
-    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-tekin-gray-500">
-      {(['Browse', 'Review', 'Send'] as const).map((label, i) => {
-        const idx = phase === 'menu' ? 0 : phase === 'review' ? 1 : 2
-        const done = i < idx
-        const active = i === idx
-        return (
-          <span key={label} className="flex items-center gap-2">
-            {i > 0 ? <ChevronRight className="h-3.5 w-3.5 opacity-40" aria-hidden /> : null}
-            <span
-              className={`rounded-full px-2.5 py-1 ${
-                done
-                  ? 'bg-tekin-emerald-light text-tekin-emerald'
-                  : active
-                    ? 'bg-tekin-navy text-white'
-                    : 'bg-tekin-gray-100 text-tekin-gray-500'
-              }`}
-            >
-              {done ? (
-                <span className="inline-flex items-center gap-1">
-                  <Check className="h-3 w-3" aria-hidden />
-                  {label}
-                </span>
-              ) : (
-                label
-              )}
-            </span>
-          </span>
-        )
-      })}
-    </div>
-  )
-
-  const showCartDock = cart.length > 0 && phase === 'menu'
-
   return (
-    <div
-      className={`flex flex-col gap-5 ${showCartDock ? 'pb-28' : 'pb-4'}`}
-    >
-      <div className="overflow-hidden rounded-2xl border border-tekin-gray-200 bg-gradient-to-br from-tekin-white via-tekin-emerald-light/25 to-tekin-white p-5 shadow-card">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-tekin-gray-500">
-              New round
-            </p>
-            <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-tekin-gray-900">
-              {RESTAURANT.name}
-            </h1>
-            <p className="mt-1 text-[13px] text-tekin-gray-600">
-              Signed in as{' '}
-              <span className="font-semibold text-tekin-gray-900">{session?.name ?? '—'}</span>
-            </p>
-          </div>
-          <div className="rounded-xl bg-tekin-white/80 px-3 py-2 backdrop-blur-sm">
-            {phaseSteps}
-          </div>
-        </div>
-        <div className="mt-5 border-t border-tekin-gray-200/80 pt-5">{tableStrip}</div>
-      </div>
-
+    <div className="flex min-h-0 flex-1 flex-col gap-5 pb-4">
       {phase === 'menu' ? (
-        <>
-          <div className="flex flex-col gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-tekin-gray-500">
-              Shelves
-            </p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {SHELVES.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setShelf(tab.id)}
-                  className={`flex min-h-[52px] min-w-[140px] shrink-0 flex-col items-start rounded-2xl border px-4 py-3 text-left transition-all duration-150 ${
-                    shelf === tab.id
-                      ? 'border-tekin-navy bg-tekin-navy text-white shadow-md'
-                      : 'border-tekin-gray-200 bg-tekin-white text-tekin-gray-800 hover:border-tekin-gray-300'
-                  }`}
-                >
-                  <span className="text-[14px] font-semibold">{tab.label}</span>
-                  <span
-                    className={`mt-0.5 text-[11px] font-medium ${
-                      shelf === tab.id ? 'text-white/80' : 'text-tekin-gray-500'
+        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)]">
+          <TekinCard className="flex h-full min-h-0 flex-col gap-4">
+            {tableStrip}
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-tekin-gray-500">
+                Categories
+              </p>
+              <div className="flex flex-col gap-2">
+                {MENU_VIEWS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setView(tab.id)}
+                    className={`flex min-h-[54px] flex-col items-start rounded-xl border px-3 py-2 text-left transition-all duration-150 ${
+                      view === tab.id
+                        ? 'border-tekin-navy bg-tekin-navy text-white'
+                        : 'border-tekin-gray-200 bg-tekin-white text-tekin-gray-800 hover:border-tekin-gray-300'
                     }`}
                   >
-                    {tab.hint}
-                  </span>
-                </button>
-              ))}
+                    <span className="text-[14px] font-semibold">{tab.label}</span>
+                    <span className={`text-[11px] ${view === tab.id ? 'text-white/80' : 'text-tekin-gray-500'}`}>
+                      {tab.hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+            <div className="mt-auto rounded-xl border border-tekin-gray-200 bg-tekin-gray-50 px-3 py-3">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-tekin-gray-600">Current round</p>
+              <p className="mt-1 text-xl font-semibold text-tekin-gray-900">{formatRwf(total)}</p>
+              <p className="text-[12px] text-tekin-gray-600">{cartCount} item(s)</p>
+              <TekinButton type="button" className="mt-3 w-full" disabled={cart.length === 0} onClick={goReview}>
+                Review order
+              </TekinButton>
+            </div>
+          </TekinCard>
 
-          <div>
-            <div className="mb-3 flex items-baseline justify-between gap-2">
-              <h2 className="text-[15px] font-semibold text-tekin-gray-900">
-                {shelfMeta?.label ?? 'Menu'}
-              </h2>
-              <span className="text-[12px] text-tekin-gray-500">{shelfMeta?.hint}</span>
+          <TekinCard className="flex h-full min-h-0 flex-col">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="text-[16px] font-semibold text-tekin-gray-900">
+                  {activeView.label}
+                </h2>
+                <p className="text-[12px] text-tekin-gray-600">{activeView.hint}</p>
+              </div>
+              <label className="relative w-full sm:w-72">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tekin-gray-400" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search menu"
+                  className="w-full rounded-xl border border-tekin-gray-200 bg-tekin-white py-2 pl-9 pr-3 text-sm text-tekin-gray-900 outline-none focus:border-tekin-emerald"
+                />
+              </label>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto pr-1 sm:grid-cols-2">
               {items.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => addToCart(item.id)}
-                  className="group flex min-h-[72px] flex-col items-stretch rounded-2xl border border-tekin-gray-100 bg-tekin-white p-4 text-left shadow-card transition-all duration-150 hover:border-tekin-emerald/40 hover:shadow-md active:scale-[0.99]"
+                  className="group flex min-h-[84px] flex-col rounded-2xl border border-tekin-gray-100 bg-tekin-white p-4 text-left shadow-card transition-all duration-150 hover:border-tekin-emerald/40 hover:shadow-md"
                 >
                   <div className="flex flex-1 items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -215,18 +209,13 @@ export function WaiterNewOrderPage() {
                 </button>
               ))}
             </div>
-          </div>
-        </>
+          </TekinCard>
+        </div>
       ) : null}
 
       {phase === 'review' ? (
         <TekinCard className="flex flex-col gap-5 border-tekin-gray-200 shadow-card">
           {tableStrip}
-          {!table ? (
-            <p className="rounded-xl border border-tekin-amber bg-tekin-amber-light px-4 py-3 text-[13px] font-medium text-tekin-gray-800">
-              Choose a table number above before sending — TEKIN routes tickets to the right cover.
-            </p>
-          ) : null}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wide text-tekin-gray-600">
@@ -281,7 +270,6 @@ export function WaiterNewOrderPage() {
             <TekinButton
               type="button"
               className="min-h-[52px] flex-1"
-              disabled={!table}
               onClick={goConfirm}
             >
               Continue to send
@@ -290,7 +278,7 @@ export function WaiterNewOrderPage() {
         </TekinCard>
       ) : null}
 
-      {phase === 'confirm' && table ? (
+      {phase === 'confirm' ? (
         <TekinCard className="flex flex-col gap-5 border-tekin-navy/20 shadow-card">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -298,7 +286,7 @@ export function WaiterNewOrderPage() {
                 Confirm · Table
               </p>
               <p className="text-[40px] font-semibold tabular-nums leading-none text-tekin-gray-900">
-                {table}
+                {table ?? 'No table'}
               </p>
             </div>
             <TekinBadge status="healthy" label="Ready to fire" />
@@ -335,9 +323,9 @@ export function WaiterNewOrderPage() {
               type="button"
               className="min-h-[56px] flex-1 text-[16px]"
               onClick={() => {
-                if (!table || cart.length === 0 || !session) return
+                if (cart.length === 0 || !session) return
                 confirmFloorOrder({
-                  table: String(table),
+                  table,
                   lines: cart.map((l) => ({ ...l })),
                 })
                 resetFlow()
@@ -349,30 +337,6 @@ export function WaiterNewOrderPage() {
             </TekinButton>
           </div>
         </TekinCard>
-      ) : null}
-
-      {showCartDock ? (
-        <div
-          className="fixed left-0 right-0 z-30 border-t border-tekin-gray-200 bg-tekin-white/95 px-4 py-3 shadow-[0_-8px_30px_rgba(0,0,0,0.06)] backdrop-blur-md"
-          style={{
-            bottom: 'calc(4.75rem + env(safe-area-inset-bottom, 0px))',
-          }}
-        >
-          <div className="mx-auto flex max-w-lg items-center justify-between gap-4 md:max-w-3xl">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-tekin-gray-500">
-                Round
-              </p>
-              <p className="text-[18px] font-semibold tabular-nums text-tekin-gray-900">
-                {formatRwf(total)}
-              </p>
-              <p className="text-[12px] text-tekin-gray-600">{cartCount} units · tap items to add</p>
-            </div>
-            <TekinButton type="button" className="min-h-[48px] shrink-0 px-6" onClick={goReview}>
-              Review
-            </TekinButton>
-          </div>
-        </div>
       ) : null}
     </div>
   )

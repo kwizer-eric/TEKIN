@@ -50,6 +50,7 @@ export function KitchenBoardPage() {
   const navigate = useNavigate()
   const tickets = useAppStore((s) => s.kitchenTickets)
   const advance = useAppStore((s) => s.advanceKitchenTicket)
+  const revert = useAppStore((s) => s.revertKitchenTicket)
   const role = useAppStore((s) => s.role)
   const setRole = useAppStore((s) => s.setRole)
   const waiterSession = useAppStore((s) => s.waiterSession)
@@ -89,7 +90,7 @@ export function KitchenBoardPage() {
               : '/waiter/login'
             : next === 'kitchen'
               ? '/kitchen'
-              : '/consumer/home'
+              : '/manager/dashboard'
     navigate(dest)
   }
 
@@ -142,6 +143,7 @@ export function KitchenBoardPage() {
           tickets={ready}
           nowTs={nowTs}
           onAdvance={advance}
+          onRevert={revert}
         />
       </main>
     </div>
@@ -155,6 +157,7 @@ type KitchenColumnProps = {
   tickets: KitchenTicket[]
   nowTs: number
   onAdvance: (id: string) => void
+  onRevert?: (id: string) => void
 }
 
 function KitchenColumn({
@@ -164,6 +167,7 @@ function KitchenColumn({
   tickets,
   nowTs,
   onAdvance,
+  onRevert,
 }: KitchenColumnProps) {
   const badgeStatus =
     tone === 'warning' ? 'warning' : tone === 'info' ? 'info' : 'healthy'
@@ -184,6 +188,7 @@ function KitchenColumn({
             ticket={ticket}
             nowTs={nowTs}
             onAdvance={onAdvance}
+            onRevert={onRevert}
           />
         ))}
       </div>
@@ -195,14 +200,20 @@ type KitchenTicketCardProps = {
   ticket: KitchenTicket
   nowTs: number
   onAdvance: (id: string) => void
+  onRevert?: (id: string) => void
 }
 
-function KitchenTicketCard({ ticket, nowTs, onAdvance }: KitchenTicketCardProps) {
+function KitchenTicketCard({
+  ticket,
+  nowTs,
+  onAdvance,
+  onRevert,
+}: KitchenTicketCardProps) {
   const waitMins = waitingMinutes(ticket, nowTs)
 
-  let timerLabel = ''
-  let timerTone = 'text-[color:var(--tekin-gray-800)]'
-  let footer = ''
+  let timerLabel: string
+  let timerTone: string
+  let footer: string
 
   if (ticket.status === 'incoming') {
     timerLabel = `${waitMins} min`
@@ -228,15 +239,61 @@ function KitchenTicketCard({ ticket, nowTs, onAdvance }: KitchenTicketCardProps)
   } else {
     timerLabel = 'Done'
     timerTone = 'text-[color:var(--tekin-emerald)]'
-    footer = 'Tap · Bump off the rail'
+    footer = 'Plated · undo if tapped by mistake'
+  }
+
+  const cardClass =
+    'rounded-2xl border border-tekin-gray-200 bg-tekin-gray-50 px-4 py-4 text-left'
+
+  const body = (
+    <KitchenTicketCardBody
+      ticket={ticket}
+      timerLabel={timerLabel}
+      timerTone={timerTone}
+      footer={footer}
+    />
+  )
+
+  if (ticket.status === 'ready' && onRevert) {
+    return (
+      <div className={cardClass}>
+        {body}
+        <TekinButton
+          type="button"
+          variant="secondary"
+          className="mt-4 w-full"
+          onClick={() => onRevert(ticket.id)}
+        >
+          Undo · back to preparing
+        </TekinButton>
+      </div>
+    )
   }
 
   return (
     <button
       type="button"
       onClick={() => onAdvance(ticket.id)}
-      className="rounded-2xl border border-tekin-gray-200 bg-tekin-gray-50 px-4 py-4 text-left transition-colors duration-150 hover:border-tekin-emerald hover:bg-tekin-emerald-light"
+      className={`${cardClass} transition-colors duration-150 hover:border-tekin-emerald hover:bg-tekin-emerald-light`}
     >
+      {body}
+    </button>
+  )
+}
+
+function KitchenTicketCardBody({
+  ticket,
+  timerLabel,
+  timerTone,
+  footer,
+}: {
+  ticket: KitchenTicket
+  timerLabel: string
+  timerTone: string
+  footer: string
+}) {
+  return (
+    <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[13px] font-semibold uppercase tracking-wide text-tekin-gray-600">
@@ -264,6 +321,6 @@ function KitchenTicketCard({ ticket, nowTs, onAdvance }: KitchenTicketCardProps)
       <p className="mt-1 text-[12px] font-semibold uppercase tracking-wide text-tekin-gray-500">
         {footer}
       </p>
-    </button>
+    </>
   )
 }
