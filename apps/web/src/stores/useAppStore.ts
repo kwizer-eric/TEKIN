@@ -2,10 +2,12 @@ import { create } from 'zustand'
 import type {
   CashierOrderLine,
   CashierOrderRow,
+  MenuItem,
   MenuKind,
 } from '../data/fixtures'
 import {
   CASHIER_ORDERS,
+  DEFAULT_TABLES,
   MENU_ITEMS,
   STAFF,
   validateWaiterPin,
@@ -16,7 +18,6 @@ export type AppRole =
   | 'cashier'
   | 'waiter'
   | 'kitchen'
-  | 'consumer'
 
 /** Kitchen must accept before prep countdown starts */
 export type KitchenTicketStatus = 'incoming' | 'preparing' | 'ready'
@@ -110,13 +111,25 @@ interface AppState {
 
   kitchenTickets: KitchenTicket[]
   advanceKitchenTicket: (id: string) => void
+  /** Move a ready ticket back to preparing (accidental bump). */
+  revertKitchenTicket: (id: string) => void
 
   waiterSession: WaiterSession | null
   waiterLogin: (name: string, pin: string) => boolean
   waiterLogout: () => void
 
-  waiterTable: number | null
-  setWaiterTable: (table: number | null) => void
+  menuItems: MenuItem[]
+  addMenuItem: (item: Omit<MenuItem, 'id'>) => void
+  updateMenuItem: (id: string, patch: Partial<Omit<MenuItem, 'id'>>) => void
+  removeMenuItem: (id: string) => void
+
+  tables: string[]
+  addTable: (table: string) => void
+  updateTable: (from: string, to: string) => void
+  removeTable: (table: string) => void
+
+  waiterTable: string | null
+  setWaiterTable: (table: string | null) => void
   waiterCart: CartLine[]
   addToCart: (menuId: string, qty?: number) => void
   setLineQty: (menuId: string, qty: number) => void
@@ -127,7 +140,8 @@ interface AppState {
   salesConfirmedTodayByWaiter: Record<string, number>
 
   cashierOrders: CashierOrderRow[]
-  confirmFloorOrder: (payload: { table: string; lines: CartLine[] }) => void
+  confirmFloorOrder: (payload: { table?: string | null; lines: CartLine[] }) => void
+  createCashierOrder: (payload: { table?: string | null; lines: CartLine[] }) => void
   markPaid: (id: string, method: 'Cash' | 'MoMo' | 'Card') => void
   completeWaiterHandover: (id: string) => void
   /** Mark every unpaid floor ticket for one waiter paid + hand-in complete (bulk balance match). */
@@ -175,6 +189,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         return t
       }),
     })),
+  revertKitchenTicket: (id) =>
+    set((s) => ({
+      kitchenTickets: s.kitchenTickets.map((t) => {
+        if (t.id !== id || t.status !== 'ready') return t
+        const acceptedAt = t.acceptedAt ?? Date.now() - t.plannedPrepMs
+        const prepDeadlineTs = t.prepDeadlineTs ?? acceptedAt + t.plannedPrepMs
+        return {
+          ...t,
+          status: 'preparing',
+          acceptedAt,
+          prepDeadlineTs,
+        }
+      }),
+    })),
 
   waiterSession: null,
   waiterLogin: (name, pin) => {
@@ -193,11 +221,65 @@ export const useAppStore = create<AppState>((set, get) => ({
       waiterCart: [],
     }),
 
+  menuItems: MENU_ITEMS.map((m) => ({ ...m })),
+  addMenuItem: (item) =>
+    set((s) => ({
+      menuItems: [
+        ...s.menuItems,
+        {
+          ...item,
+          id: `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        },
+      ],
+    })),
+  updateMenuItem: (id, patch) =>
+    set((s) => ({
+      menuItems: s.menuItems.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    })),
+  removeMenuItem: (id) =>
+    set((s) => ({
+      menuItems: s.menuItems.filter((m) => m.id !== id),
+      waiterCart: s.waiterCart.filter((l) => l.menuId !== id),
+    })),
+
+  tables: DEFAULT_TABLES,
+  addTable: (table) =>
+    set((s) => {
+      const clean = table.trim()
+      if (!clean || s.tables.includes(clean)) return {}
+      return { tables: [...s.tables, clean] }
+    }),
+  updateTable: (from, to) =>
+    set((s) => {
+      const clean = to.trim()
+      if (!clean || from === clean) return {}
+      const alreadyExists = s.tables.includes(clean)
+      if (alreadyExists) return {}
+      return {
+        tables: s.tables.map((t) => (t === from ? clean : t)),
+        waiterTable: s.waiterTable === from ? clean : s.waiterTable,
+        cashierOrders: s.cashierOrders.map((o) =>
+          o.table === from ? { ...o, table: clean } : o,
+        ),
+      }
+    }),
+  removeTable: (table) =>
+    set((s) => ({
+      tables: s.tables.filter((t) => t !== table),
+      waiterTable: s.waiterTable === table ? null : s.waiterTable,
+      cashierOrders: s.cashierOrders.map((o) =>
+        o.table === table ? { ...o, table: undefined } : o,
+      ),
+      kitchenTickets: s.kitchenTickets.map((t) =>
+        t.table === table ? { ...t, table: 'No table' } : t,
+      ),
+    })),
+
   waiterTable: null,
   setWaiterTable: (table) => set({ waiterTable: table }),
   waiterCart: [],
   addToCart: (menuId, qty = 1) => {
-    const item = MENU_ITEMS.find((m) => m.id === menuId)
+    const item = get().menuItems.find((m) => m.id === menuId)
     if (!item) return
     set((s) => {
       const existing = s.waiterCart.find((l) => l.menuId === menuId)
@@ -260,10 +342,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       kind: l.kind,
     }))
 
+    const tableLabel = table?.trim() ? table.trim() : undefined
     const newCashier: CashierOrderRow = {
       id: orderId,
       channel: 'waiter',
-      table,
+      ...(tableLabel ? { table: tableLabel } : {}),
       totalRwf: total,
       placedByWaiterName: session.name,
       receivedAt: Date.now(),
@@ -283,7 +366,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           {
             id: `KF-${Date.now().toString(36)}`,
             orderNumber: orderId,
-            table,
+            table: tableLabel ?? 'No table',
             items: itemsStr,
             startedAt: Date.now(),
             plannedPrepMs,
@@ -303,6 +386,55 @@ export const useAppStore = create<AppState>((set, get) => ({
         cashierOrders: [newCashier, ...s.cashierOrders],
         kitchenTickets,
         salesConfirmedTodayByWaiter,
+      }
+    })
+  },
+  createCashierOrder: ({ table, lines }) => {
+    if (lines.length === 0) return
+    const total = lines.reduce((sum, l) => sum + l.unitPriceRwf * l.qty, 0)
+    const orderId = `C-${Date.now().toString(36).toUpperCase()}`
+    const foodLines = lines.filter((l) => l.kind === 'food')
+    const drinkLines = lines.filter((l) => l.kind !== 'food')
+    const tableLabel = table?.trim() ? table.trim() : undefined
+    const linesDetail: CashierOrderLine[] = lines.map((l) => ({
+      name: l.name,
+      qty: l.qty,
+      kind: l.kind,
+    }))
+
+    set((s) => {
+      let kitchenTickets = s.kitchenTickets
+      if (foodLines.length > 0) {
+        const itemsStr = foodLines.map((l) => `${l.qty}× ${l.name}`)
+        const plannedPrepMs = Math.max(
+          ...foodLines.map((l) => (l.prepMinutes ?? 14) * 60_000),
+        )
+        kitchenTickets = [
+          {
+            id: `KC-${Date.now().toString(36)}`,
+            orderNumber: orderId,
+            table: tableLabel ?? 'No table',
+            items: itemsStr,
+            startedAt: Date.now(),
+            plannedPrepMs,
+            status: 'incoming',
+          },
+          ...kitchenTickets,
+        ]
+      }
+      const newCashier: CashierOrderRow = {
+        id: orderId,
+        channel: 'cashier',
+        ...(tableLabel ? { table: tableLabel } : {}),
+        totalRwf: total,
+        receivedAt: Date.now(),
+        paid: false,
+        lines: linesDetail,
+        barQueuePriority: drinkLines.length > 0 && foodLines.length === 0,
+      }
+      return {
+        cashierOrders: [newCashier, ...s.cashierOrders],
+        kitchenTickets,
       }
     })
   },

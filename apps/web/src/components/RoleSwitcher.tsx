@@ -5,7 +5,6 @@ const ROLE_LABEL: Record<AppRole, string> = {
   cashier: 'Cashier',
   waiter: 'Waiter',
   kitchen: 'Kitchen',
-  consumer: 'Consumer',
 }
 
 export type RoleSwitcherProps = {

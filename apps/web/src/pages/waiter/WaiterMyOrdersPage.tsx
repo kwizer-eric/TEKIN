@@ -3,7 +3,7 @@
  */
 import { TekinBadge, TekinCard, TekinEmptyState } from '@tekin/ui'
 import { ClipboardList } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { CashierOrderRow } from '../../data/fixtures'
 import { formatRwf, relativeOrAbsolute } from '../../lib/format'
 import { useAppStore } from '../../stores/useAppStore'
@@ -34,16 +34,41 @@ export function WaiterMyOrdersPage() {
     (s) => s.salesConfirmedTodayByWaiter,
   )
 
+  const [period, setPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day')
+
+  const sinceTs = useMemo(() => {
+    const now = new Date()
+    if (period === 'day') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      return start.getTime()
+    }
+    if (period === 'week') {
+      const day = now.getDay()
+      const diffToMonday = (day + 6) % 7
+      const start = new Date(now)
+      start.setDate(now.getDate() - diffToMonday)
+      start.setHours(0, 0, 0, 0)
+      return start.getTime()
+    }
+    if (period === 'month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      return start.getTime()
+    }
+    return new Date(now.getFullYear(), 0, 1).getTime()
+  }, [period])
+
   const mine = useMemo(() => {
     if (!session) return []
     return orders
       .filter(
         (o) =>
-          o.channel === 'waiter' && o.placedByWaiterName === session.name,
+          o.channel === 'waiter' &&
+          o.placedByWaiterName === session.name &&
+          o.receivedAt >= sinceTs,
       )
       .slice()
       .sort((a, b) => b.receivedAt - a.receivedAt)
-  }, [orders, session])
+  }, [orders, session, sinceTs])
 
   const shiftTotal =
     session != null ? salesConfirmedTodayByWaiter[session.name] ?? 0 : 0
@@ -71,7 +96,23 @@ export function WaiterMyOrdersPage() {
           <h2 className="text-[16px] font-semibold text-tekin-gray-900">
             Your floor tickets
           </h2>
-          <TekinBadge status="info" label={`${mine.length} linked`} />
+          <div className="flex flex-wrap items-center gap-2">
+            {(['day', 'week', 'month', 'year'] as const).map((window) => (
+              <button
+                key={window}
+                type="button"
+                onClick={() => setPeriod(window)}
+                className={`rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors ${
+                  period === window
+                    ? 'bg-tekin-emerald text-white'
+                    : 'bg-tekin-gray-100 text-tekin-gray-700 hover:bg-tekin-gray-200'
+                }`}
+              >
+                {window}
+              </button>
+            ))}
+            <TekinBadge status="info" label={`${mine.length} linked`} />
+          </div>
         </div>
         {mine.length === 0 ? (
           <TekinEmptyState
@@ -92,7 +133,7 @@ export function WaiterMyOrdersPage() {
                       {row.id}
                     </p>
                     <p className="text-[13px] text-tekin-gray-600">
-                      Table {row.table ?? '—'}
+                      {row.table ? `Table ${row.table}` : 'No table'}
                     </p>
                     <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-tekin-gray-400">
                       Sent {relativeOrAbsolute(row.receivedAt)}

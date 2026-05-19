@@ -19,7 +19,6 @@ import {
   UtensilsCrossed,
 } from 'lucide-react'
 import { RoleSwitcher } from '../components/RoleSwitcher'
-import type { AppRole } from '../stores/useAppStore'
 import { useAppStore } from '../stores/useAppStore'
 
 const MANAGER_NAV: TekinNavItem[] = [
@@ -34,11 +33,6 @@ const MANAGER_NAV: TekinNavItem[] = [
   { path: '/manager/staff', label: 'Staff', icon: Users },
   { path: '/manager/settings', label: 'Settings', icon: Settings },
 ]
-
-function roleForSidebar(appRole: AppRole): TekinSidebarRole {
-  if (appRole === 'consumer') return 'consumer'
-  return appRole
-}
 
 export type ShellLayoutProps = {
   navItems: TekinNavItem[]
@@ -72,16 +66,16 @@ export function ShellLayout({
     (matchTitle?.handle as { title?: string } | undefined)?.title ?? title
 
   return (
-    <div className="flex min-h-screen bg-tekin-gray-50">
+    <div className="flex h-screen overflow-hidden bg-tekin-gray-50">
       <TekinSidebar
         brandLabel="TEKIN"
-        role={roleForSidebar(appRole)}
+        role={appRole as TekinSidebarRole}
         roleBadge={sidebarRoleLabel ?? appRole}
         items={navItems}
         activePath={location.pathname}
         onNavigate={(path) => navigate(path)}
       />
-      <div className="flex min-h-screen flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col">
         <TekinTopBar
           title={pageTitle}
           subtitle={subtitle}
@@ -101,13 +95,15 @@ export function ShellLayout({
                           : '/waiter/login'
                         : next === 'kitchen'
                           ? '/kitchen'
-                          : '/consumer/home'
+                          : '/manager/dashboard'
                 navigate(dest)
               }}
             />
           }
         />
-        <main className="flex-1 p-6">{children ?? <Outlet />}</main>
+        <main className="flex min-h-0 flex-1 flex-col overflow-auto p-6">
+          {children ?? <Outlet />}
+        </main>
       </div>
     </div>
   )

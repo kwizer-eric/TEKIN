@@ -126,6 +126,11 @@ export const MENU_ITEMS: MenuItem[] = [
   },
 ]
 
+export const DEFAULT_TABLES: string[] = Array.from(
+  { length: 16 },
+  (_, i) => String(i + 1),
+)
+
 /** Demo PINs — replace with auth service in production */
 export const WAITER_PIN_BY_NAME: Record<string, string> = Object.fromEntries(
   STAFF.waiters.map((w) => [w, '4242']),
@@ -227,6 +232,7 @@ export const KITCHEN_PERF: KitchenPerfSlice[] = [
 /** How the guest placed / paid — drives cashier custody vs waiter hold. */
 export type CashierOrderChannel =
   | 'waiter'
+  | 'cashier'
   | 'online'
   | 'nearby'
   | 'table_qr'

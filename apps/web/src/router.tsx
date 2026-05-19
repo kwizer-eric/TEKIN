@@ -1,5 +1,4 @@
 import { CashierLayout } from './layouts/CashierLayout'
-import { ConsumerLayout } from './layouts/ConsumerLayout'
 import { RootLayout } from './layouts/RootLayout'
 import { ManagerLayout } from './layouts/ShellLayout'
 import { WaiterAppShell } from './layouts/WaiterAppShell'
@@ -7,9 +6,6 @@ import { CashierOrdersPage } from './pages/cashier/CashierOrdersPage'
 import { CashierPaymentsPage } from './pages/cashier/CashierPaymentsPage'
 import { CashierShiftPage } from './pages/cashier/CashierShiftPage'
 import { CashierWaiterSettlePage } from './pages/cashier/CashierWaiterSettlePage'
-import { ConsumerActivityPage } from './pages/consumer/ConsumerActivityPage'
-import { ConsumerCreditPage } from './pages/consumer/ConsumerCreditPage'
-import { ConsumerHomePage } from './pages/consumer/ConsumerHomePage'
 import { KitchenBoardPage } from './pages/kitchen/KitchenBoardPage'
 import { ManagerAiPage } from './pages/manager/ManagerAiPage'
 import { ManagerAnalyticsPage } from './pages/manager/ManagerAnalyticsPage'
@@ -157,28 +153,6 @@ export const router = createBrowserRouter([
       {
         path: 'kitchen',
         element: <KitchenBoardPage />,
-      },
-      {
-        path: 'consumer',
-        element: <ConsumerLayout />,
-        children: [
-          { index: true, element: <Navigate to="home" replace /> },
-          {
-            path: 'home',
-            handle: { title: 'Trust home' },
-            element: <ConsumerHomePage />,
-          },
-          {
-            path: 'activity',
-            handle: { title: 'Activity' },
-            element: <ConsumerActivityPage />,
-          },
-          {
-            path: 'credit',
-            handle: { title: 'Credit' },
-            element: <ConsumerCreditPage />,
-          },
-        ],
       },
       {
         path: '*',

@@ -1,491 +1,192 @@
 /**
- * Screen: Cashier orders feed — Happening vs past, pipeline status, per-ticket pay.
+ * Screen: Cashier — press counter orders only.
  */
-import {
-  TekinBadge,
-  TekinButton,
-  TekinCard,
-  TekinInput,
-  TekinMetricCard,
-} from '@tekin/ui'
+import { TekinBadge, TekinButton, TekinCard } from '@tekin/ui'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import type { CashierOrderChannel, MenuKind } from '../../data/fixtures'
-import { formatRwf, relativeOrAbsolute } from '../../lib/format'
-import {
-  isOrderHappening,
-  pipelineStatusForOrder,
-} from '../../lib/orderPipeline'
-import { useAppStore } from '../../stores/useAppStore'
+import { formatRwf } from '../../lib/format'
+import { useAppStore, type CartLine } from '../../stores/useAppStore'
 
-type Lane = 'happening' | 'past'
-type ChannelFilter = 'all' | 'unpaid' | 'waiter' | 'direct' | 'handover'
-
-function channelLabel(c: CashierOrderChannel): string {
-  const labels: Record<CashierOrderChannel, string> = {
-    waiter: 'Floor waiter',
-    online: 'Online',
-    nearby: 'Nearby',
-    table_qr: 'Table QR',
-  }
-  return labels[c]
-}
-
-function lineKindLabel(k: MenuKind): string {
-  const labels: Record<MenuKind, string> = {
-    liquor: 'Liquor',
-    beer: 'Beer',
-    soft: 'Soft',
-    food: 'Kitchen',
-  }
-  return labels[k]
-}
+type EntryCategory = 'drinks' | 'food'
 
 export function CashierOrdersPage() {
-  const orders = useAppStore((s) => s.cashierOrders)
-  const kitchenTickets = useAppStore((s) => s.kitchenTickets)
-  const markPaid = useAppStore((s) => s.markPaid)
-  const completeWaiterHandover = useAppStore((s) => s.completeWaiterHandover)
+  const menuItems = useAppStore((s) => s.menuItems)
+  const tables = useAppStore((s) => s.tables)
+  const createCashierOrder = useAppStore((s) => s.createCashierOrder)
 
-  const ktRefs = useMemo(
+  const [entryCategory, setEntryCategory] = useState<EntryCategory>('drinks')
+  const [entryTable, setEntryTable] = useState<string>('')
+  const [entryQuery, setEntryQuery] = useState('')
+  const [entryLines, setEntryLines] = useState<CartLine[]>([])
+
+  const entryItems = useMemo(() => {
+    const q = entryQuery.trim().toLowerCase()
+    return menuItems.filter((item) => {
+      const inCategory =
+        entryCategory === 'food'
+          ? item.kind === 'food'
+          : item.kind === 'liquor' || item.kind === 'beer' || item.kind === 'soft'
+      if (!inCategory) return false
+      if (!q) return true
+      return item.name.toLowerCase().includes(q)
+    })
+  }, [entryCategory, entryQuery, menuItems])
+
+  const entryTotal = useMemo(
     () =>
-      kitchenTickets.map((t) => ({
-        orderNumber: t.orderNumber,
-        status: t.status,
-      })),
-    [kitchenTickets],
+      entryLines.reduce((sum, line) => sum + line.unitPriceRwf * line.qty, 0),
+    [entryLines],
   )
 
-  const [lane, setLane] = useState<Lane>('happening')
-  const [filter, setFilter] = useState<ChannelFilter>('all')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [method, setMethod] = useState<'Cash' | 'MoMo' | 'Card'>('Cash')
-
-  const metrics = useMemo(() => {
-    const waiterHold = orders
-      .filter((o) => o.channel === 'waiter' && !o.paid)
-      .reduce((s, o) => s + o.totalRwf, 0)
-    const needsHandover = orders
-      .filter(
-        (o) =>
-          o.channel === 'waiter' &&
-          o.paid &&
-          !o.waiterHandoverComplete,
-      )
-      .reduce((s, o) => s + o.totalRwf, 0)
-    const cashierCustody = orders
-      .filter((o) => o.channel !== 'waiter' && o.paid)
-      .reduce((s, o) => s + o.totalRwf, 0)
-    const happeningCount = orders.filter((o) => isOrderHappening(o)).length
-    return {
-      waiterHold,
-      needsHandover,
-      cashierCustody,
-      happeningCount,
-    }
-  }, [orders])
-
-  const filteredOrders = useMemo(() => {
-    let list = orders.filter((o) =>
-      lane === 'happening' ? isOrderHappening(o) : !isOrderHappening(o),
-    )
-
-    switch (filter) {
-      case 'unpaid':
-        list = list.filter((o) => !o.paid)
-        break
-      case 'waiter':
-        list = list.filter((o) => o.channel === 'waiter')
-        break
-      case 'direct':
-        list = list.filter((o) => o.channel !== 'waiter')
-        break
-      case 'handover':
-        list = list.filter(
-          (o) =>
-            o.channel === 'waiter' &&
-            o.paid &&
-            !o.waiterHandoverComplete,
+  const upsertEntryLine = (menuId: string) => {
+    const item = menuItems.find((m) => m.id === menuId)
+    if (!item) return
+    setEntryLines((prev) => {
+      const existing = prev.find((line) => line.menuId === menuId)
+      if (existing) {
+        return prev.map((line) =>
+          line.menuId === menuId ? { ...line, qty: line.qty + 1 } : line,
         )
-        break
-      default:
-        break
-    }
-    return list.sort((a, b) => b.receivedAt - a.receivedAt)
-  }, [orders, lane, filter])
+      }
+      return [
+        ...prev,
+        {
+          menuId: item.id,
+          name: item.name,
+          unitPriceRwf: item.priceRwf,
+          qty: 1,
+          kind: item.kind,
+          prepMinutes: item.prepMinutes,
+        },
+      ]
+    })
+  }
 
-  const selected = useMemo(() => {
-    if (!selectedId) return undefined
-    const row = orders.find((o) => o.id === selectedId)
-    if (!row) return undefined
-    if (!filteredOrders.some((o) => o.id === selectedId)) return undefined
-    return row
-  }, [orders, selectedId, filteredOrders])
-
-  const channelFilters: { id: ChannelFilter; label: string }[] = [
-    { id: 'all', label: 'All' },
-    { id: 'unpaid', label: 'Unpaid' },
-    { id: 'waiter', label: 'Floor' },
-    { id: 'direct', label: 'Direct pay' },
-    { id: 'handover', label: 'Hand-in due' },
-  ]
+  const setEntryQty = (menuId: string, qty: number) => {
+    setEntryLines((prev) =>
+      qty <= 0
+        ? prev.filter((line) => line.menuId !== menuId)
+        : prev.map((line) => (line.menuId === menuId ? { ...line, qty } : line)),
+    )
+  }
 
   return (
-    <div className="flex flex-col gap-4">
-      <TekinCard padding="compact" className="border-tekin-gray-200">
-        <p className="text-[13px] text-tekin-gray-700">
-          <span className="font-semibold text-tekin-gray-900">Happening</span> is anything still
-          moving — open tabs, kitchen stages, or cash you owe back from a waiter.{' '}
-          <span className="font-semibold text-tekin-gray-900">Past</span> is closed history. Bulk
-          waiter balances live on{' '}
-          <Link
-            to="/cashier/waiter-settle"
-            className="font-semibold text-tekin-emerald underline-offset-2 hover:underline"
-          >
-            Waiter balance
-          </Link>
-          .
-        </p>
-      </TekinCard>
-
-      <section className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
-        <TekinMetricCard
-          label="Waiter hold (unpaid floor)"
-          value={formatRwf(metrics.waiterHold)}
-          delta={{
-            text:
-              metrics.happeningCount > 0
-                ? `${metrics.happeningCount} active pipeline ticket${metrics.happeningCount === 1 ? '' : 's'}`
-                : 'Pipeline clear',
-            tone: metrics.waiterHold > 0 ? 'warning' : 'positive',
-          }}
-        />
-        <TekinMetricCard
-          label="Paid · needs waiter hand-in"
-          value={formatRwf(metrics.needsHandover)}
-          delta={{
-            text: 'Confirm cash landed from floor',
-            tone: metrics.needsHandover > 0 ? 'warning' : 'neutral',
-          }}
-        />
-        <TekinMetricCard
-          label="Cashier custody (direct)"
-          value={formatRwf(metrics.cashierCustody)}
-          delta={{
-            text: 'QR · online · nearby',
-            tone: 'neutral',
-          }}
-        />
-      </section>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setLane('happening')
-            setSelectedId(null)
-          }}
-          className={`rounded-full px-5 py-2 text-[12px] font-semibold uppercase tracking-wide transition-colors duration-150 ${
-            lane === 'happening'
-              ? 'bg-tekin-navy text-white'
-              : 'bg-tekin-gray-100 text-tekin-gray-700 hover:bg-tekin-gray-200'
-          }`}
-        >
-          Happening
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setLane('past')
-            setSelectedId(null)
-          }}
-          className={`rounded-full px-5 py-2 text-[12px] font-semibold uppercase tracking-wide transition-colors duration-150 ${
-            lane === 'past'
-              ? 'bg-tekin-navy text-white'
-              : 'bg-tekin-gray-100 text-tekin-gray-700 hover:bg-tekin-gray-200'
-          }`}
-        >
-          Past
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {channelFilters.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => {
-              setFilter(tab.id)
-              setSelectedId(null)
-            }}
-            className={`rounded-full px-4 py-2 text-[12px] font-semibold uppercase tracking-wide transition-colors duration-150 ${
-              filter === tab.id
-                ? 'bg-tekin-emerald text-white'
-                : 'bg-tekin-gray-100 text-tekin-gray-700 hover:bg-tekin-gray-200'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid flex-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <TekinCard className="min-h-[420px]">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <div className="flex flex-col gap-4 pb-6">
+      <TekinCard className="min-h-[min(72vh,720px)] border-tekin-gray-200">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
             <h2 className="text-[16px] font-semibold text-tekin-gray-900">
-              {lane === 'happening' ? 'Orders in motion' : 'Completed tickets'}
+              Press order at counter
             </h2>
-            <TekinBadge status="info" label={`${filteredOrders.length} shown`} />
-          </div>
-          <ul className="flex flex-col gap-3">
-            {filteredOrders.map((o) => {
-              const waiterPending =
-                o.channel === 'waiter' &&
-                o.paid &&
-                !o.waiterHandoverComplete
-              const subtitle =
-                o.channel === 'waiter'
-                  ? `${o.placedByWaiterName ?? 'Waiter'} · Table ${o.table ?? '—'}`
-                  : (o.routeNote ??
-                    (o.table ? `Table ${o.table}` : 'Venue direct'))
-              const pipe = pipelineStatusForOrder(o, ktRefs)
-
-              return (
-                <li key={o.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(o.id)}
-                    className={`flex w-full min-h-[52px] flex-col gap-2 rounded-xl border px-4 py-3 text-left transition-colors duration-150 sm:flex-row sm:items-center sm:justify-between ${
-                      selectedId === o.id
-                        ? 'border-tekin-emerald bg-tekin-emerald-light'
-                        : 'border-tekin-gray-200 bg-tekin-white hover:bg-tekin-gray-50'
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-[15px] font-semibold text-tekin-gray-900">
-                          {o.id}
-                        </p>
-                        <TekinBadge status="neutral" label={channelLabel(o.channel)} />
-                        <TekinBadge status={pipe.badge} label={pipe.label} />
-                        {!o.paid ? (
-                          <TekinBadge status="warning" label="Unpaid" />
-                        ) : waiterPending ? (
-                          <TekinBadge status="warning" label="Hand-in due" />
-                        ) : o.channel === 'waiter' ? (
-                          <TekinBadge status="healthy" label="Closed with waiter" />
-                        ) : (
-                          <TekinBadge status="healthy" label="Paid direct" />
-                        )}
-                        {o.barQueuePriority ? (
-                          <TekinBadge status="info" label="Bar first" />
-                        ) : null}
-                      </div>
-                      <p className="mt-1 text-[13px] text-tekin-gray-600">{subtitle}</p>
-                      <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-tekin-gray-400">
-                        In {relativeOrAbsolute(o.receivedAt)}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end">
-                      <span className="text-[20px] font-semibold text-tekin-gray-900">
-                        {formatRwf(o.totalRwf)}
-                      </span>
-                      {o.paid && o.method ? (
-                        <span className="text-[12px] font-medium text-tekin-gray-600">
-                          {o.method}
-                        </span>
-                      ) : null}
-                    </div>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </TekinCard>
-
-        <TekinCard className="flex flex-col gap-4">
-          <h2 className="text-[16px] font-semibold text-tekin-gray-900">
-            Payment & detail
-          </h2>
-          {selected != null &&
-          selected.lines != null &&
-          selected.lines.length > 0 ? (
-            <div className="rounded-xl border border-tekin-gray-200 bg-tekin-gray-50 px-4 py-4">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-tekin-gray-600">
-                Line breakdown
-              </p>
-              <ul className="mt-3 flex flex-col gap-2">
-                {selected.lines.map((line, idx) => (
-                  <li
-                    key={`${line.name}-${idx}`}
-                    className="flex flex-wrap items-baseline justify-between gap-2 text-sm text-tekin-gray-800"
-                  >
-                    <span>
-                      <span className="font-semibold text-tekin-gray-900">
-                        {line.qty}×
-                      </span>{' '}
-                      {line.name}
-                    </span>
-                    <TekinBadge
-                      status={line.kind === 'food' ? 'warning' : 'neutral'}
-                      label={lineKindLabel(line.kind)}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {!selected ? (
-            <p className="text-sm text-tekin-gray-600">
-              Select an order — pipeline status reflects kitchen progress for food tickets.
+            <p className="text-[13px] text-tekin-gray-600">
+              Cashier and waiter share the same menu and tables. Track and settle
+              floor tickets under Waiter balance.
             </p>
-          ) : lane === 'past' ? (
-            <div className="rounded-xl border border-tekin-gray-200 bg-tekin-gray-50 px-4 py-4">
-              <p className="text-sm font-semibold text-tekin-gray-900">
-                Archived ticket
-              </p>
-              <p className="mt-2 text-[13px] text-tekin-gray-600">
-                This round is closed — no further cashier actions.
-              </p>
-              <p className="mt-4 text-[22px] font-semibold text-tekin-gray-900">
-                {formatRwf(selected.totalRwf)}
-              </p>
-              <TekinBadge
-                status="healthy"
-                label={
-                  selected.paid && selected.method
-                    ? `Paid · ${selected.method}`
-                    : 'Recorded'
-                }
-              />
-            </div>
-          ) : selected.channel !== 'waiter' ? (
-            <div className="flex flex-col gap-3">
-              <TekinAlertInline
-                title="Direct channel"
-                body="Guest paid at source — TEKIN books this under cashier custody for reporting. No counter collection unless you issue a refund adjustment."
-                variant="info"
-              />
-              <div className="rounded-xl border border-tekin-gray-200 bg-tekin-gray-50 px-4 py-4">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-tekin-gray-600">
-                  Amount recorded
-                </p>
-                <p className="mt-2 text-[28px] font-semibold text-tekin-gray-900">
-                  {formatRwf(selected.totalRwf)}
-                </p>
-              </div>
-              <TekinBadge
-                status={selected.paid ? 'healthy' : 'warning'}
-                label={
-                  selected.paid
-                    ? `Paid · ${selected.method ?? ''}`
-                    : 'Awaiting gateway'
-                }
-              />
-            </div>
-          ) : !selected.paid ? (
-            <>
-              <div className="rounded-xl border border-tekin-amber bg-tekin-amber-light px-4 py-4">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-tekin-gray-600">
-                  With waiter until collected
-                </p>
-                <p className="mt-2 text-[15px] font-semibold text-tekin-gray-900">
-                  {selected.placedByWaiterName ?? 'Waiter'} · Table{' '}
-                  {selected.table ?? '—'}
-                </p>
-                <p className="mt-3 text-[32px] font-semibold text-tekin-gray-900">
-                  {formatRwf(selected.totalRwf)}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {(['Cash', 'MoMo', 'Card', 'Split'] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    disabled={m === 'Split'}
-                    onClick={() =>
-                      m !== 'Split' && setMethod(m as typeof method)
-                    }
-                    className={`min-h-[52px] rounded-xl border text-[15px] font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${
-                      method === m
-                        ? 'border-tekin-emerald bg-tekin-emerald-light text-tekin-emerald'
-                        : 'border-tekin-gray-200 bg-tekin-white text-tekin-gray-900 hover:bg-tekin-gray-50'
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-              <TekinInput label="Reference (optional)" placeholder="MoMo TX id…" />
-              <TekinButton
+          </div>
+          <TekinBadge status="info" label={`${entryLines.length} lines`} />
+        </div>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {(['drinks', 'food'] as const).map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setEntryCategory(cat)}
+              className={`rounded-full px-4 py-2 text-[12px] font-semibold uppercase tracking-wide ${
+                entryCategory === cat
+                  ? 'bg-tekin-navy text-white'
+                  : 'bg-tekin-gray-100 text-tekin-gray-700 hover:bg-tekin-gray-200'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+          <select
+            value={entryTable}
+            onChange={(e) => setEntryTable(e.target.value)}
+            className="rounded-full border border-tekin-gray-200 bg-tekin-white px-3 py-2 text-sm text-tekin-gray-800"
+          >
+            <option value="">No table</option>
+            {tables.map((table) => (
+              <option key={table} value={table}>
+                Table {table}
+              </option>
+            ))}
+          </select>
+          <input
+            value={entryQuery}
+            onChange={(e) => setEntryQuery(e.target.value)}
+            placeholder="Search menu"
+            className="min-w-[220px] rounded-full border border-tekin-gray-200 bg-tekin-white px-3 py-2 text-sm text-tekin-gray-800 outline-none focus:border-tekin-emerald"
+          />
+        </div>
+        <div className="grid min-h-[min(58vh,560px)] gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+          <div className="grid min-h-[min(52vh,480px)] max-h-[min(52vh,480px)] grid-cols-1 gap-2 overflow-auto pr-1 sm:grid-cols-2">
+            {entryItems.map((item) => (
+              <button
+                key={item.id}
                 type="button"
-                className="min-h-[52px] w-full text-[15px]"
-                onClick={() => markPaid(selected.id, method)}
+                onClick={() => upsertEntryLine(item.id)}
+                className="rounded-xl border border-tekin-gray-200 bg-tekin-white px-3 py-3 text-left hover:border-tekin-emerald/40"
               >
-                Confirm payment
-              </TekinButton>
-              <p className="text-[12px] text-tekin-gray-600">
-                Paying several tabs at once? Use{' '}
-                <Link
-                  to="/cashier/waiter-settle"
-                  className="font-semibold text-tekin-emerald underline-offset-2 hover:underline"
-                >
-                  Waiter balance
-                </Link>{' '}
-                to settle the full running balance per waiter.
-              </p>
-            </>
-          ) : !selected.waiterHandoverComplete ? (
-            <>
-              <TekinAlertInline
-                title="Guest paid at counter"
-                body={`Confirm ${selected.placedByWaiterName ?? 'the waiter'} handed you ${formatRwf(selected.totalRwf)} — only then close this ticket.`}
-                variant="warning"
-              />
-              <TekinButton
-                type="button"
-                className="min-h-[52px] w-full text-[15px]"
-                onClick={() => completeWaiterHandover(selected.id)}
-              >
-                Confirm hand-in from waiter
-              </TekinButton>
-            </>
-          ) : (
-            <div className="rounded-xl border border-tekin-gray-200 bg-tekin-gray-50 px-4 py-4">
-              <p className="text-sm font-semibold text-tekin-gray-900">
-                Ticket balanced with floor staff.
-              </p>
-              <p className="mt-2 text-[13px] text-tekin-gray-600">
-                {selected.placedByWaiterName} · {formatRwf(selected.totalRwf)}{' '}
-                · {selected.method}
-              </p>
-            </div>
-          )}
-        </TekinCard>
-      </div>
-    </div>
-  )
-}
-
-function TekinAlertInline({
-  title,
-  body,
-  variant,
-}: {
-  title: string
-  body: string
-  variant: 'info' | 'warning'
-}) {
-  const box =
-    variant === 'warning'
-      ? 'border-tekin-amber bg-tekin-amber-light'
-      : 'border-tekin-blue bg-tekin-blue-light'
-  const titleCls =
-    variant === 'warning' ? 'text-tekin-amber' : 'text-tekin-blue'
-  return (
-    <div className={`rounded-xl border px-4 py-3 ${box}`}>
-      <p className={`text-[13px] font-semibold ${titleCls}`}>{title}</p>
-      <p className="mt-1 text-[13px] text-tekin-gray-800">{body}</p>
+                <p className="text-sm font-semibold text-tekin-gray-900">{item.name}</p>
+                <p className="text-[12px] text-tekin-gray-600">{formatRwf(item.priceRwf)}</p>
+              </button>
+            ))}
+          </div>
+          <div className="flex min-h-[min(52vh,480px)] flex-col rounded-xl border border-tekin-gray-200 bg-tekin-gray-50 p-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-tekin-gray-600">
+              Order review
+            </p>
+            <ul className="mt-2 flex min-h-0 flex-1 flex-col gap-2 overflow-auto pr-1">
+              {entryLines.length === 0 ? (
+                <li className="text-[13px] text-tekin-gray-600">No items yet</li>
+              ) : (
+                entryLines.map((line) => (
+                  <li key={line.menuId} className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] text-tekin-gray-800">
+                      {line.qty}x {line.name}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        className="h-7 w-7 rounded-md border border-tekin-gray-200 bg-white"
+                        onClick={() => setEntryQty(line.menuId, line.qty - 1)}
+                      >
+                        -
+                      </button>
+                      <button
+                        type="button"
+                        className="h-7 w-7 rounded-md border border-tekin-gray-200 bg-white"
+                        onClick={() => setEntryQty(line.menuId, line.qty + 1)}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </li>
+                ))
+              )}
+            </ul>
+            <p className="mt-3 text-lg font-semibold text-tekin-gray-900">
+              {formatRwf(entryTotal)}
+            </p>
+            <TekinButton
+              type="button"
+              className="mt-3 w-full"
+              disabled={entryLines.length === 0}
+              onClick={() => {
+                createCashierOrder({
+                  table: entryTable || null,
+                  lines: entryLines.map((line) => ({ ...line })),
+                })
+                setEntryLines([])
+                setEntryTable('')
+                setEntryQuery('')
+              }}
+            >
+              Confirm and send
+            </TekinButton>
+          </div>
+        </div>
+      </TekinCard>
     </div>
   )
 }
